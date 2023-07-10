@@ -3,12 +3,13 @@ package parsing
 import "gox/internal/scanning"
 
 type Visitor interface {
-	VisitForLiteral(expr *Literal) any
-	VisitForUnary(expr *Unary) any
-	VisitForBinary(expr *Binary) any
-	VisitForGrouping(expr *Grouping) any
+	visitForLiteral(expr *Literal) any
+	visitForUnary(expr *Unary) any
+	visitForBinary(expr *Binary) any
+	visitForGrouping(expr *Grouping) any
 }
 
+// TODO: add some methods to this because like this it can be renamed to "Visitable"
 type Expr interface {
 	accept(visitor Visitor) any
 }
@@ -18,7 +19,7 @@ type Literal struct {
 }
 
 func (r *Literal) accept(visitor Visitor) any {
-	return visitor.VisitForLiteral(r)
+	return visitor.visitForLiteral(r)
 }
 
 type Unary struct {
@@ -27,17 +28,17 @@ type Unary struct {
 }
 
 func (r *Unary) accept(visitor Visitor) any {
-	return visitor.VisitForUnary(r)
+	return visitor.visitForUnary(r)
 }
 
 type Binary struct {
-	Left    *Expr
-	Operand scanning.Token
-	Right   *Expr
+	left     Expr
+	operator scanning.Token
+	right    Expr
 }
 
 func (r *Binary) accept(visitor Visitor) any {
-	return visitor.VisitForBinary(r)
+	return visitor.visitForBinary(r)
 }
 
 type Grouping struct {
@@ -45,5 +46,5 @@ type Grouping struct {
 }
 
 func (r *Grouping) accept(visitor Visitor) any {
-	return visitor.VisitForGrouping(r)
+	return visitor.visitForGrouping(r)
 }
