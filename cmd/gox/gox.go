@@ -42,7 +42,7 @@ func (r *Gox) run(source string) error {
 	lexer := scanning.NewLexer(source)
 	tokens, err := lexer.ScanTokens()
 	if err != nil {
-		Error(err.Line, err.Error())
+		Error(err.Line, err.Error(), "")
 		return err
 	}
 	for _, token := range tokens {
@@ -51,10 +51,6 @@ func (r *Gox) run(source string) error {
 	return nil
 }
 
-func Error(line int, message string) {
-	report(line, "", message)
-}
-
-func report(line int, where string, message string) {
+func Error(line int, message, where string) {
 	fmt.Printf("[line %d] Error %s: %s\n", line, where, message)
 }
