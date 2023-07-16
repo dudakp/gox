@@ -3,6 +3,7 @@ package gox
 import (
 	"bufio"
 	"fmt"
+	"gox/internal/parsing"
 	"gox/internal/scanning"
 	"os"
 )
@@ -48,6 +49,8 @@ func (r *Gox) run(source string) error {
 	for _, token := range tokens {
 		fmt.Println(token.String())
 	}
+	ast, _ := parsing.NewParser(tokens).Parse()
+	fmt.Println(ast)
 	return nil
 }
 

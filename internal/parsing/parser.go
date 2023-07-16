@@ -1,6 +1,7 @@
 package parsing
 
 import (
+	"errors"
 	"gox/internal/scanning"
 )
 
@@ -14,6 +15,11 @@ func NewParser(tokens []scanning.Token) *Parser {
 		tokens:  tokens,
 		current: 0,
 	}
+}
+
+func (r *Parser) Parse() (Expr, error) {
+	res := r.expression()
+	return res, nil
 }
 
 func (r *Parser) expression() Expr {
@@ -109,6 +115,7 @@ func (r *Parser) primary() Expr {
 
 	if r.match(scanning.LEFT_PAREN) {
 		expr := r.expression()
+		// TODO: propagate error
 		r.consume(scanning.RIGHT_PAREN, "expected ) after expression")
 		return &Grouping{expression: expr}
 	}
@@ -119,7 +126,7 @@ func (r *Parser) consume(t scanning.TokenType, message string) (scanning.Token, 
 	if r.check(t) {
 		return r.advance(), nil
 	}
-	return scanning.Token{}, errors.
+	return scanning.Token{}, errors.New(message)
 }
 
 func (r *Parser) match(types ...scanning.TokenType) bool {
