@@ -14,6 +14,7 @@ type TokenError struct {
 	Token scanning.Token
 }
 
+// TODO: write tests
 type Parser struct {
 	tokens  []scanning.Token
 	current int
@@ -108,7 +109,7 @@ func (r *Parser) unary() (Expr, *TokenError) {
 	for r.match(scanning.BANG, scanning.MINUS) {
 		operator := r.previous()
 		right, err := r.unary()
-		return &Binary{
+		return &Unary{
 			Operator: operator,
 			Right:    right,
 		}, err
@@ -133,11 +134,11 @@ func (r *Parser) primary() (Expr, *TokenError) {
 
 	if r.match(scanning.LEFT_PAREN) {
 		expr, tokenErr := r.expression()
-		_, tokenErr = r.consume(scanning.RIGHT_PAREN, "expected ) after expression")
+		_, tokenErr = r.consume(scanning.RIGHT_PAREN, "expected ) after Expression")
 		if tokenErr != nil {
 			return nil, tokenErr
 		}
-		return &Grouping{expression: expr}, nil
+		return &Grouping{Expression: expr}, nil
 	}
 	return nil, nil
 }

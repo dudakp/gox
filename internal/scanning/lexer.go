@@ -37,6 +37,7 @@ type SyntaxError struct {
 	Line int
 }
 
+// TODO: write tests
 type Lexer struct {
 	Source  string
 	tokens  []Token

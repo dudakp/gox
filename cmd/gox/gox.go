@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"gox/internal/parsing"
+	"gox/internal/runtime"
 	"gox/internal/scanning"
 	"os"
 )
@@ -46,20 +47,20 @@ func (r *Gox) run(source string) error {
 		Error(syntaxErr.Line, syntaxErr.Error(), "")
 		return syntaxErr
 	}
-	for _, token := range tokens {
-		fmt.Println(token.String())
-	}
+	//for _, token := range tokens {
+	//	fmt.Println(token.String())
+	//}
 	ast, parseErr := parsing.NewParser(tokens).Parse()
 	if parseErr != nil {
 		TokenError(parseErr)
 		return parseErr
 	}
-	printer := &parsing.AstPrinter{}
-	tree, err := printer.Print(ast)
-	if err != nil {
-		return err
+	interpreter := &runtime.Interpreter{}
+	res, interpreterErr := interpreter.Interpret(ast)
+	if interpreterErr != nil {
+		Error(interpreterErr.Token.Line, interpreterErr.Error(), "")
 	}
-	fmt.Println(tree)
+	fmt.Println(res)
 	return nil
 }
 

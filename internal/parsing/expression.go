@@ -3,22 +3,22 @@ package parsing
 import "gox/internal/scanning"
 
 type Visitor interface {
-	VisitForLiteral(expr *Literal) any
-	VisitForUnary(expr *Unary) any
-	VisitForBinary(expr *Binary) any
-	VisitForGrouping(expr *Grouping) any
+	VisitForLiteral(expr *Literal) (any, error)
+	VisitForUnary(expr *Unary) (any, error)
+	VisitForBinary(expr *Binary) (any, error)
+	VisitForGrouping(expr *Grouping) (any, error)
 }
 
 // TODO: add some methods to this because like this it can be renamed to "Visitable"
 type Expr interface {
-	Accept(visitor Visitor) any
+	Accept(visitor Visitor) (any, error)
 }
 
 type Literal struct {
 	Value interface{}
 }
 
-func (r *Literal) Accept(visitor Visitor) any {
+func (r *Literal) Accept(visitor Visitor) (any, error) {
 	return visitor.VisitForLiteral(r)
 }
 
@@ -27,7 +27,7 @@ type Unary struct {
 	Right    Expr
 }
 
-func (r *Unary) Accept(visitor Visitor) any {
+func (r *Unary) Accept(visitor Visitor) (any, error) {
 	return visitor.VisitForUnary(r)
 }
 
@@ -37,14 +37,14 @@ type Binary struct {
 	Right    Expr
 }
 
-func (r *Binary) Accept(visitor Visitor) any {
+func (r *Binary) Accept(visitor Visitor) (any, error) {
 	return visitor.VisitForBinary(r)
 }
 
 type Grouping struct {
-	expression Expr
+	Expression Expr
 }
 
-func (r *Grouping) Accept(visitor Visitor) any {
+func (r *Grouping) Accept(visitor Visitor) (any, error) {
 	return visitor.VisitForGrouping(r)
 }
