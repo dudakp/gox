@@ -5,9 +5,20 @@ import (
 	"gox/internal/scanning"
 )
 
+type ParseError struct {
+	TokenError
+}
+
+type TokenError struct {
+	error
+	Token scanning.Token
+}
+
 type Parser struct {
 	tokens  []scanning.Token
 	current int
+
+	error ParseError
 }
 
 func NewParser(tokens []scanning.Token) *Parser {
@@ -17,116 +28,129 @@ func NewParser(tokens []scanning.Token) *Parser {
 	}
 }
 
-func (r *Parser) Parse() (Expr, error) {
-	res := r.expression()
-	return res, nil
+func (r *Parser) Parse() (Expr, *ParseError) {
+	expression, err := r.expression()
+	if err != nil {
+		return nil, &ParseError{
+			TokenError{
+				error: err,
+				Token: err.Token,
+			}}
+	}
+	return expression, nil
 }
 
-func (r *Parser) expression() Expr {
+func (r *Parser) expression() (Expr, *TokenError) {
 	return r.equality()
 }
 
-func (r *Parser) equality() Expr {
-	expr := r.comparison()
+func (r *Parser) equality() (Expr, *TokenError) {
+	expr, err := r.comparison()
 
 	for r.match(scanning.BANG, scanning.BANG_EQUAL) {
 		operator := r.previous()
-		right := r.comparison()
+		right, err := r.comparison()
 		return &Binary{
-			left:     expr,
-			operator: operator,
-			right:    right,
-		}
+			Left:     expr,
+			Operator: operator,
+			Right:    right,
+		}, err
 	}
-	return expr
+	return expr, err
 }
 
-func (r *Parser) comparison() Expr {
-	expr := r.term()
+func (r *Parser) comparison() (Expr, *TokenError) {
+	expr, err := r.term()
 
 	for r.match(scanning.GREATER, scanning.GREATER_EQUAL, scanning.LESS, scanning.LESS_EQUAL) {
 		operator := r.previous()
-		right := r.term()
+		right, err := r.term()
 		return &Binary{
-			left:     expr,
-			operator: operator,
-			right:    right,
-		}
+			Left:     expr,
+			Operator: operator,
+			Right:    right,
+		}, err
 	}
-	return expr
+	return expr, err
 }
 
-func (r *Parser) term() Expr {
-	expr := r.factor()
+func (r *Parser) term() (Expr, *TokenError) {
+	expr, err := r.factor()
 
 	for r.match(scanning.MINUS, scanning.PLUS) {
 		operator := r.previous()
-		right := r.term()
+		right, err := r.term()
 		return &Binary{
-			left:     expr,
-			operator: operator,
-			right:    right,
-		}
+			Left:     expr,
+			Operator: operator,
+			Right:    right,
+		}, err
 	}
-	return expr
+	return expr, err
 }
 
-func (r *Parser) factor() Expr {
-	expr := r.unary()
+func (r *Parser) factor() (Expr, *TokenError) {
+	expr, err := r.unary()
 
 	for r.match(scanning.SLASH, scanning.STAR) {
 		operator := r.previous()
-		right := r.term()
+		right, err := r.term()
 		return &Binary{
-			left:     expr,
-			operator: operator,
-			right:    right,
-		}
+			Left:     expr,
+			Operator: operator,
+			Right:    right,
+		}, err
 	}
-	return expr
+	return expr, err
 }
 
-func (r *Parser) unary() Expr {
+func (r *Parser) unary() (Expr, *TokenError) {
 	for r.match(scanning.BANG, scanning.MINUS) {
 		operator := r.previous()
-		right := r.unary()
+		right, err := r.unary()
 		return &Binary{
-			operator: operator,
-			right:    right,
-		}
+			Operator: operator,
+			Right:    right,
+		}, err
 	}
 	return r.primary()
 }
 
-func (r *Parser) primary() Expr {
+func (r *Parser) primary() (Expr, *TokenError) {
 	if r.match(scanning.FALSE) {
-		return &Literal{value: false}
+		return &Literal{Value: false}, nil
 	}
 	if r.match(scanning.TRUE) {
-		return &Literal{value: true}
+		return &Literal{Value: true}, nil
 	}
 	if r.match(scanning.NIL) {
-		return &Literal{value: nil}
+		return &Literal{Value: nil}, nil
 	}
 
 	if r.match(scanning.NUMBER, scanning.STRING) {
-		return &Literal{value: r.previous().Literal}
+		return &Literal{Value: r.previous().Literal}, nil
 	}
 
 	if r.match(scanning.LEFT_PAREN) {
-		expr := r.expression()
+		expr, tokenErr := r.expression()
 		// TODO: propagate error
-		r.consume(scanning.RIGHT_PAREN, "expected ) after expression")
-		return &Grouping{expression: expr}
+		_, tokenErr = r.consume(scanning.RIGHT_PAREN, "expected ) after expression")
+		if tokenErr != nil {
+			return nil, tokenErr
+		}
+		return &Grouping{expression: expr}, nil
 	}
-	return nil
+	return nil, nil
 }
 
-func (r *Parser) consume(t scanning.TokenType, message string) (scanning.Token, error) {
+func (r *Parser) consume(t scanning.TokenType, message string) (scanning.Token, *TokenError) {
 	if r.check(t) {
 		return r.advance(), nil
 	}
-	return scanning.Token{}, errors.New(message)
+	return scanning.Token{}, &TokenError{
+		error: errors.New(message),
+		Token: r.peek(),
+	}
 }
 
 func (r *Parser) match(types ...scanning.TokenType) bool {
@@ -166,3 +190,47 @@ func (r *Parser) advance() scanning.Token {
 func (r *Parser) peek() scanning.Token {
 	return r.tokens[r.current]
 }
+
+func (r *Parser) synchronize() {
+	r.advance()
+
+	for !r.isAtEnd() {
+		if r.previous().TokenType == scanning.SEMICOLON {
+			return
+		}
+		switch r.peek().TokenType {
+		case scanning.CLASS:
+		case scanning.FUN:
+		case scanning.VAR:
+		case scanning.FOR:
+		case scanning.IF:
+		case scanning.WHILE:
+		case scanning.PRINT:
+		case scanning.RETURN:
+			return
+		}
+	}
+	r.advance()
+}
+
+//private void synchronize() {
+//advance();
+//
+//while (!isAtEnd()) {
+//if (previous().type == SEMICOLON) return;
+//
+//switch (peek().type) {
+//case CLASS:
+//case FUN:
+//case VAR:
+//case FOR:
+//case IF:
+//case WHILE:
+//case PRINT:
+//case RETURN:
+//return;
+//}
+//
+//advance();
+//}
+//}

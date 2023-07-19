@@ -41,19 +41,37 @@ func (r *Gox) Repl() {
 // run makes necessary calls to execute the source code
 func (r *Gox) run(source string) error {
 	lexer := scanning.NewLexer(source)
-	tokens, err := lexer.ScanTokens()
-	if err != nil {
-		Error(err.Line, err.Error(), "")
-		return err
+	tokens, syntaxErr := lexer.ScanTokens()
+	if syntaxErr != nil {
+		Error(syntaxErr.Line, syntaxErr.Error(), "")
+		return syntaxErr
 	}
 	for _, token := range tokens {
 		fmt.Println(token.String())
 	}
-	ast, _ := parsing.NewParser(tokens).Parse()
-	fmt.Println(ast)
+	ast, parseErr := parsing.NewParser(tokens).Parse()
+	if parseErr != nil {
+		TokenError(parseErr)
+		return parseErr
+	}
+	printer := &parsing.AstPrinter{}
+	tree, err := printer.Print(ast)
+	if err != nil {
+		return err
+	}
+	fmt.Println(tree)
 	return nil
 }
 
 func Error(line int, message, where string) {
 	fmt.Printf("[line %d] Error %s: %s\n", line, where, message)
+}
+
+func TokenError(parseError *parsing.ParseError) {
+	token := parseError.Token
+	if token.TokenType == scanning.EOF {
+		Error(token.Line, parseError.Error(), "")
+	} else {
+		Error(token.Line, parseError.Error(), token.Lexeme)
+	}
 }
