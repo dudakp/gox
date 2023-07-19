@@ -133,7 +133,6 @@ func (r *Parser) primary() (Expr, *TokenError) {
 
 	if r.match(scanning.LEFT_PAREN) {
 		expr, tokenErr := r.expression()
-		// TODO: propagate error
 		_, tokenErr = r.consume(scanning.RIGHT_PAREN, "expected ) after expression")
 		if tokenErr != nil {
 			return nil, tokenErr
@@ -212,25 +211,3 @@ func (r *Parser) synchronize() {
 	}
 	r.advance()
 }
-
-//private void synchronize() {
-//advance();
-//
-//while (!isAtEnd()) {
-//if (previous().type == SEMICOLON) return;
-//
-//switch (peek().type) {
-//case CLASS:
-//case FUN:
-//case VAR:
-//case FOR:
-//case IF:
-//case WHILE:
-//case PRINT:
-//case RETURN:
-//return;
-//}
-//
-//advance();
-//}
-//}
