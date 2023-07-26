@@ -41,38 +41,33 @@ func (r *Gox) Repl() {
 
 // run makes necessary calls to execute the source code
 func (r *Gox) run(source string) error {
-	lexer := scanning.NewLexer(source)
-	tokens, syntaxErr := lexer.ScanTokens()
+	tokens, syntaxErr := scanning.NewLexer(source).ScanTokens()
 	if syntaxErr != nil {
-		Error(syntaxErr.Line, syntaxErr.Error(), "")
+		ReportError(syntaxErr.Line, syntaxErr.Error(), "")
 		return syntaxErr
 	}
-	//for _, token := range tokens {
-	//	fmt.Println(token.String())
-	//}
 	ast, parseErr := parsing.NewParser(tokens).Parse()
 	if parseErr != nil {
-		TokenError(parseErr)
+		ReportParseError(parseErr)
 		return parseErr
 	}
 	interpreter := &runtime.Interpreter{}
-	res, interpreterErr := interpreter.Interpret(ast)
+	interpreterErr := interpreter.Interpret(ast)
 	if interpreterErr != nil {
-		Error(interpreterErr.Token.Line, interpreterErr.Error(), "")
+		ReportError(interpreterErr.Token.Line, interpreterErr.Error(), "")
 	}
-	fmt.Println(res)
 	return nil
 }
 
-func Error(line int, message, where string) {
-	fmt.Printf("[line %d] Error %s: %s\n", line, where, message)
+func ReportError(line int, message, where string) {
+	fmt.Printf("[line %d] error %s: %s\n", line, where, message)
 }
 
-func TokenError(parseError *parsing.ParseError) {
+func ReportParseError(parseError *parsing.ParseError) {
 	token := parseError.Token
 	if token.TokenType == scanning.EOF {
-		Error(token.Line, parseError.Error(), "")
+		ReportError(token.Line, parseError.Error(), "")
 	} else {
-		Error(token.Line, parseError.Error(), token.Lexeme)
+		ReportError(token.Line, parseError.Error(), token.Lexeme)
 	}
 }

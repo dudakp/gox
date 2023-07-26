@@ -270,5 +270,5 @@ func (r *Lexer) isAtEnd() bool {
 }
 
 func (r *Lexer) clean(s string) string {
-	return strings.Trim(strings.TrimSpace(s), "\"")
+	return strings.Trim(s, "\"")
 }

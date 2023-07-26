@@ -1,4 +1,4 @@
-package parsing
+package expression
 
 import "gox/internal/scanning"
 

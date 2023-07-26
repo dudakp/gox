@@ -3,32 +3,44 @@ package runtime
 import (
 	"errors"
 	"fmt"
-	"gox/internal/parsing"
+	"gox/internal/expression"
 	"gox/internal/scanning"
+	"gox/internal/statement"
 )
 
 type RuntimeError struct {
 	error
-	Token scanning.Token
+	Token *scanning.Token
 }
 
 // TODO: write tests
 type Interpreter struct {
 }
 
-func (r *Interpreter) Interpret(expr parsing.Expr) (string, *RuntimeError) {
-	res, err := r.evaluate(expr)
-	if err != nil {
-		return "", err.(*RuntimeError)
+func (r *Interpreter) Interpret(statements []*statement.Stmt) *RuntimeError {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("unable to interpret given code!")
+		}
+	}()
+	for _, stmt := range statements {
+		if stmt == nil {
+			continue
+		}
+		err := r.execute(*stmt)
+		if err != nil {
+			return err.(*RuntimeError)
+		}
 	}
-	return toString(res), nil
+	return nil
 }
 
-func (r *Interpreter) VisitForLiteral(expr *parsing.Literal) (any, error) {
+// expressions
+func (r *Interpreter) VisitForLiteral(expr *expression.Literal) (any, error) {
 	return expr.Value, nil
 }
 
-func (r *Interpreter) VisitForUnary(expr *parsing.Unary) (any, error) {
+func (r *Interpreter) VisitForUnary(expr *expression.Unary) (any, error) {
 	right, err := r.evaluate(expr.Right)
 	if err != nil {
 		return nil, err
@@ -44,7 +56,7 @@ func (r *Interpreter) VisitForUnary(expr *parsing.Unary) (any, error) {
 	return nil, nil
 }
 
-func (r *Interpreter) VisitForBinary(expr *parsing.Binary) (any, error) {
+func (r *Interpreter) VisitForBinary(expr *expression.Binary) (any, error) {
 	left, err := r.evaluate(expr.Left)
 	if err != nil {
 		return nil, err
@@ -94,7 +106,7 @@ func (r *Interpreter) VisitForBinary(expr *parsing.Binary) (any, error) {
 		_, leftIsString := left.(string)
 		_, rightIsString := right.(string)
 		if leftIsString && rightIsString {
-			return left.(string) + right.(string), nil
+			return fmt.Sprint(left.(string) + right.(string)), nil
 		} else {
 			if err = r.checkNumberOperands(expr.Operator, left, right); err != nil {
 				return nil, err
@@ -115,11 +127,24 @@ func (r *Interpreter) VisitForBinary(expr *parsing.Binary) (any, error) {
 	return nil, nil
 }
 
-func (r *Interpreter) VisitForGrouping(expr *parsing.Grouping) (any, error) {
+func (r *Interpreter) VisitForGrouping(expr *expression.Grouping) (any, error) {
 	return r.evaluate(expr.Expression)
 }
 
-func (r *Interpreter) evaluate(expr parsing.Expr) (any, error) {
+// statements
+func (r *Interpreter) VisitForExpression(stmt *statement.Expression) error {
+	_, err := r.evaluate(*stmt.Expression)
+	return err
+}
+
+func (r *Interpreter) VisitForPrint(stmt *statement.Print) error {
+	value, err := r.evaluate(*stmt.Expression)
+	fmt.Println(toString(value))
+	return err
+}
+
+// TODO: mayber change param to pointer?
+func (r *Interpreter) evaluate(expr expression.Expr) (any, error) {
 	return expr.Accept(r)
 }
 
@@ -143,7 +168,7 @@ func (r *Interpreter) checkNumberOperand(operator scanning.Token, operand any) e
 	}
 	return &RuntimeError{
 		error: errors.New("operand must be number"),
-		Token: operator,
+		Token: &operator,
 	}
 }
 
@@ -155,8 +180,12 @@ func (r *Interpreter) checkNumberOperands(operator scanning.Token, operand1, ope
 	}
 	return &RuntimeError{
 		error: errors.New("both operands must be numbers"),
-		Token: operator,
+		Token: &operator,
 	}
+}
+
+func (r *Interpreter) execute(stmt statement.Stmt) error {
+	return stmt.Accept(r)
 }
 
 func toString(a any) string {
