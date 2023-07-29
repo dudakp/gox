@@ -3,9 +3,8 @@ package runtime
 import (
 	"errors"
 	"fmt"
-	"gox/internal/expression"
+	"gox/internal/parsing"
 	"gox/internal/scanning"
-	"gox/internal/statement"
 )
 
 type RuntimeError struct {
@@ -26,7 +25,7 @@ func NewInterpreter() *Interpreter {
 	}
 }
 
-func (r *Interpreter) Interpret(statements []*statement.Stmt) *RuntimeError {
+func (r *Interpreter) Interpret(statements []*parsing.Stmt) *RuntimeError {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Printf("unable to interpret given code: %s", err)
@@ -45,11 +44,11 @@ func (r *Interpreter) Interpret(statements []*statement.Stmt) *RuntimeError {
 }
 
 // expressions
-func (r *Interpreter) VisitForLiteral(expr *expression.Literal) (any, error) {
+func (r *Interpreter) VisitForLiteral(expr *parsing.Literal) (any, error) {
 	return expr.Value, nil
 }
 
-func (r *Interpreter) VisitForUnary(expr *expression.Unary) (any, error) {
+func (r *Interpreter) VisitForUnary(expr *parsing.Unary) (any, error) {
 	right, err := r.evaluate(*expr.Right)
 	if err != nil {
 		return nil, err
@@ -65,7 +64,7 @@ func (r *Interpreter) VisitForUnary(expr *expression.Unary) (any, error) {
 	return nil, nil
 }
 
-func (r *Interpreter) VisitForBinary(expr *expression.Binary) (any, error) {
+func (r *Interpreter) VisitForBinary(expr *parsing.Binary) (any, error) {
 	left, err := r.evaluate(*expr.Left)
 	if err != nil {
 		return nil, err
@@ -136,11 +135,11 @@ func (r *Interpreter) VisitForBinary(expr *expression.Binary) (any, error) {
 	return nil, nil
 }
 
-func (r *Interpreter) VisitForGrouping(expr *expression.Grouping) (any, error) {
+func (r *Interpreter) VisitForGrouping(expr *parsing.Grouping) (any, error) {
 	return r.evaluate(*expr.Expression)
 }
 
-func (r *Interpreter) VisitForVariableExpression(expr *expression.Var) (any, error) {
+func (r *Interpreter) VisitForVariableExpression(expr *parsing.VarExpr) (any, error) {
 	res, err := r.env.get(expr.Name)
 	if err != nil {
 		return nil, &RuntimeError{
@@ -151,7 +150,7 @@ func (r *Interpreter) VisitForVariableExpression(expr *expression.Var) (any, err
 	return res, nil
 }
 
-func (r *Interpreter) VisitForAssignExpression(expr *expression.Assign) (any, error) {
+func (r *Interpreter) VisitForAssignExpression(expr *parsing.Assign) (any, error) {
 	val, err := r.evaluate(expr.Value)
 	if err != nil {
 		return nil, &RuntimeError{
@@ -170,12 +169,12 @@ func (r *Interpreter) VisitForAssignExpression(expr *expression.Assign) (any, er
 }
 
 // statements
-func (r *Interpreter) VisitForExpression(stmt *statement.Expression) error {
+func (r *Interpreter) VisitForExpression(stmt *parsing.Expression) error {
 	_, err := r.evaluate(*stmt.Expression)
 	return err
 }
 
-func (r *Interpreter) VisitForPrint(stmt *statement.Print) error {
+func (r *Interpreter) VisitForPrint(stmt *parsing.Print) error {
 	value, err := r.evaluate(*stmt.Expression)
 	if err == nil {
 		fmt.Println(toString(value))
@@ -183,7 +182,7 @@ func (r *Interpreter) VisitForPrint(stmt *statement.Print) error {
 	return err
 }
 
-func (r *Interpreter) VisitForVar(stmt *statement.Var) error {
+func (r *Interpreter) VisitForVar(stmt *parsing.Var) error {
 	if stmt.Initializer != nil {
 		value, err := r.evaluate(*stmt.Initializer)
 		if err != nil {
@@ -196,8 +195,7 @@ func (r *Interpreter) VisitForVar(stmt *statement.Var) error {
 	return nil
 }
 
-// TODO: mayber change param to pointer?
-func (r *Interpreter) evaluate(expr expression.Expr) (any, error) {
+func (r *Interpreter) evaluate(expr parsing.Expr) (any, error) {
 	return expr.Accept(r)
 }
 
@@ -237,7 +235,7 @@ func (r *Interpreter) checkNumberOperands(operator scanning.Token, operand1, ope
 	}
 }
 
-func (r *Interpreter) execute(stmt statement.Stmt) error {
+func (r *Interpreter) execute(stmt parsing.Stmt) error {
 	return stmt.Accept(r)
 }
 

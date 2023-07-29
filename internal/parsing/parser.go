@@ -2,9 +2,7 @@ package parsing
 
 import (
 	"errors"
-	"gox/internal/expression"
 	"gox/internal/scanning"
-	"gox/internal/statement"
 )
 
 const (
@@ -37,8 +35,8 @@ func NewParser(tokens []scanning.Token) *Parser {
 	}
 }
 
-func (r *Parser) Parse() ([]*statement.Stmt, *ParseError) {
-	var res = make([]*statement.Stmt, 0)
+func (r *Parser) Parse() ([]*Stmt, *ParseError) {
+	var res = make([]*Stmt, 0)
 	for !r.isAtEnd() {
 		stmt, err := r.declaration()
 		if err != nil {
@@ -53,7 +51,7 @@ func (r *Parser) Parse() ([]*statement.Stmt, *ParseError) {
 	return res, nil
 }
 
-func (r *Parser) declaration() (statement.Stmt, *TokenError) {
+func (r *Parser) declaration() (Stmt, *TokenError) {
 	if r.match(scanning.VAR) {
 		declaration, tokenError := r.varDeclaration()
 		if tokenError != nil {
@@ -67,7 +65,7 @@ func (r *Parser) declaration() (statement.Stmt, *TokenError) {
 	}
 }
 
-func (r *Parser) varDeclaration() (statement.Stmt, *TokenError) {
+func (r *Parser) varDeclaration() (Stmt, *TokenError) {
 	identifier, tokenError := r.consume(scanning.IDENTIFIER, "expected variable name")
 	if tokenError != nil {
 		return nil, tokenError
@@ -80,18 +78,18 @@ func (r *Parser) varDeclaration() (statement.Stmt, *TokenError) {
 		}
 		_, tokenError := r.consume(scanning.SEMICOLON, expectedSemicolonMsg)
 
-		return &statement.Var{
+		return &Var{
 			Name:        identifier,
 			Initializer: &initializer,
 		}, tokenError
 	}
 	_, tokenError = r.consume(scanning.SEMICOLON, expectedSemicolonMsg)
-	return &statement.Var{
+	return &Var{
 		Name: identifier,
 	}, tokenError
 }
 
-func (r *Parser) statement() (statement.Stmt, *TokenError) {
+func (r *Parser) statement() (Stmt, *TokenError) {
 	if r.match(scanning.PRINT) {
 		return r.printStatement()
 	} else {
@@ -99,17 +97,17 @@ func (r *Parser) statement() (statement.Stmt, *TokenError) {
 	}
 }
 
-func (r *Parser) expression() (expression.Expr, *TokenError) {
+func (r *Parser) expression() (Expr, *TokenError) {
 	return r.assignment()
 }
 
-func (r *Parser) equality() (expression.Expr, *TokenError) {
+func (r *Parser) equality() (Expr, *TokenError) {
 	expr, err := r.comparison()
 
 	for r.match(scanning.BANG, scanning.BANG_EQUAL) {
 		operator := r.previous()
 		right, err := r.comparison()
-		return &expression.Binary{
+		return &Binary{
 			Left:     &expr,
 			Operator: operator,
 			Right:    &right,
@@ -118,13 +116,13 @@ func (r *Parser) equality() (expression.Expr, *TokenError) {
 	return expr, err
 }
 
-func (r *Parser) comparison() (expression.Expr, *TokenError) {
+func (r *Parser) comparison() (Expr, *TokenError) {
 	expr, err := r.term()
 
 	for r.match(scanning.GREATER, scanning.GREATER_EQUAL, scanning.LESS, scanning.LESS_EQUAL) {
 		operator := r.previous()
 		right, err := r.term()
-		return &expression.Binary{
+		return &Binary{
 			Left:     &expr,
 			Operator: operator,
 			Right:    &right,
@@ -133,13 +131,13 @@ func (r *Parser) comparison() (expression.Expr, *TokenError) {
 	return expr, err
 }
 
-func (r *Parser) term() (expression.Expr, *TokenError) {
+func (r *Parser) term() (Expr, *TokenError) {
 	expr, err := r.factor()
 
 	for r.match(scanning.MINUS, scanning.PLUS) {
 		operator := r.previous()
 		right, err := r.term()
-		return &expression.Binary{
+		return &Binary{
 			Left:     &expr,
 			Operator: operator,
 			Right:    &right,
@@ -148,13 +146,13 @@ func (r *Parser) term() (expression.Expr, *TokenError) {
 	return expr, err
 }
 
-func (r *Parser) factor() (expression.Expr, *TokenError) {
+func (r *Parser) factor() (Expr, *TokenError) {
 	expr, err := r.unary()
 
 	for r.match(scanning.SLASH, scanning.STAR) {
 		operator := r.previous()
 		right, err := r.term()
-		return &expression.Binary{
+		return &Binary{
 			Left:     &expr,
 			Operator: operator,
 			Right:    &right,
@@ -163,11 +161,11 @@ func (r *Parser) factor() (expression.Expr, *TokenError) {
 	return expr, err
 }
 
-func (r *Parser) unary() (expression.Expr, *TokenError) {
+func (r *Parser) unary() (Expr, *TokenError) {
 	for r.match(scanning.BANG, scanning.MINUS) {
 		operator := r.previous()
 		right, err := r.unary()
-		return &expression.Unary{
+		return &Unary{
 			Operator: operator,
 			Right:    &right,
 		}, err
@@ -175,24 +173,24 @@ func (r *Parser) unary() (expression.Expr, *TokenError) {
 	return r.primary()
 }
 
-func (r *Parser) primary() (expression.Expr, *TokenError) {
+func (r *Parser) primary() (Expr, *TokenError) {
 	if r.match(scanning.FALSE) {
-		return &expression.Literal{Value: false}, nil
+		return &Literal{Value: false}, nil
 	}
 	if r.match(scanning.TRUE) {
-		return &expression.Literal{Value: true}, nil
+		return &Literal{Value: true}, nil
 	}
 	if r.match(scanning.NIL) {
-		return &expression.Literal{Value: nil}, nil
+		return &Literal{Value: nil}, nil
 	}
 
 	if r.match(scanning.NUMBER, scanning.STRING) {
-		return &expression.Literal{Value: r.previous().Literal}, nil
+		return &Literal{Value: r.previous().Literal}, nil
 	}
 
 	if r.match(scanning.IDENTIFIER) {
 		prev := r.previous()
-		return &expression.Var{
+		return &VarExpr{
 			Name: prev,
 		}, nil
 	}
@@ -203,7 +201,7 @@ func (r *Parser) primary() (expression.Expr, *TokenError) {
 		if tokenErr != nil {
 			return nil, tokenErr
 		}
-		return &expression.Grouping{Expression: &expr}, nil
+		return &Grouping{Expression: &expr}, nil
 	}
 	return nil, nil
 }
@@ -219,7 +217,7 @@ func (r *Parser) consume(t scanning.TokenType, message string) (*scanning.Token,
 	}
 }
 
-func (r *Parser) consumeExpression() (expression.Expr, *TokenError) {
+func (r *Parser) consumeExpression() (Expr, *TokenError) {
 	value, tokenError := r.expression()
 	if tokenError != nil {
 		return nil, tokenError
@@ -291,21 +289,21 @@ func (r *Parser) synchronize() {
 	r.advance()
 }
 
-func (r *Parser) printStatement() (statement.Stmt, *TokenError) {
+func (r *Parser) printStatement() (Stmt, *TokenError) {
 	expr, err := r.consumeExpression()
-	return &statement.Print{
+	return &Print{
 		Expression: &expr,
 	}, err
 }
 
-func (r *Parser) expressionStatement() (statement.Stmt, *TokenError) {
+func (r *Parser) expressionStatement() (Stmt, *TokenError) {
 	expr, err := r.consumeExpression()
-	return &statement.Expression{
+	return &Expression{
 		Expression: &expr,
 	}, err
 }
 
-func (r *Parser) assignment() (expression.Expr, *TokenError) {
+func (r *Parser) assignment() (Expr, *TokenError) {
 	expr, tokenError := r.equality()
 	if tokenError != nil {
 		return nil, tokenError
@@ -317,9 +315,9 @@ func (r *Parser) assignment() (expression.Expr, *TokenError) {
 			return nil, tokenError
 		}
 
-		if _, ok := expr.(*expression.Var); ok {
-			name := expr.(*expression.Var).Name
-			return &expression.Assign{
+		if _, ok := expr.(*VarExpr); ok {
+			name := expr.(*VarExpr).Name
+			return &Assign{
 				Name:  name,
 				Value: value,
 			}, nil
