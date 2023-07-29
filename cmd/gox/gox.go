@@ -7,13 +7,19 @@ import (
 	"gox/internal/runtime"
 	"gox/internal/scanning"
 	"os"
+	"path/filepath"
 )
 
 type Gox struct {
+	Interpreter *runtime.Interpreter
 }
 
 func (r *Gox) RunFile(path string) error {
-	file, err := os.ReadFile(path)
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
+	file, err := os.ReadFile(absPath)
 	if err != nil {
 		fmt.Println("An error occurred while reading file. Please try again", err)
 		return err
@@ -51,8 +57,7 @@ func (r *Gox) run(source string) error {
 		ReportParseError(parseErr)
 		return parseErr
 	}
-	interpreter := &runtime.Interpreter{}
-	interpreterErr := interpreter.Interpret(ast)
+	interpreterErr := r.Interpreter.Interpret(ast)
 	if interpreterErr != nil {
 		ReportError(interpreterErr.Token.Line, interpreterErr.Error(), "")
 	}

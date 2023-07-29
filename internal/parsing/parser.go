@@ -7,6 +7,14 @@ import (
 	"gox/internal/statement"
 )
 
+const (
+	expectedSemicolonMsg = "expected ; after statement"
+)
+
+var (
+	invalidAssignmentTarget = errors.New("invalid assignment target")
+)
+
 type ParseError struct {
 	TokenError
 }
@@ -30,9 +38,9 @@ func NewParser(tokens []scanning.Token) *Parser {
 }
 
 func (r *Parser) Parse() ([]*statement.Stmt, *ParseError) {
-	var res = make([]*statement.Stmt, len(r.tokens))
+	var res = make([]*statement.Stmt, 0)
 	for !r.isAtEnd() {
-		stmt, err := r.statement()
+		stmt, err := r.declaration()
 		if err != nil {
 			return nil, &ParseError{
 				TokenError{
@@ -45,6 +53,44 @@ func (r *Parser) Parse() ([]*statement.Stmt, *ParseError) {
 	return res, nil
 }
 
+func (r *Parser) declaration() (statement.Stmt, *TokenError) {
+	if r.match(scanning.VAR) {
+		declaration, tokenError := r.varDeclaration()
+		if tokenError != nil {
+			r.synchronize()
+			// TODO: really dont return tokenErr?
+			return nil, nil
+		}
+		return declaration, tokenError
+	} else {
+		return r.statement()
+	}
+}
+
+func (r *Parser) varDeclaration() (statement.Stmt, *TokenError) {
+	identifier, tokenError := r.consume(scanning.IDENTIFIER, "expected variable name")
+	if tokenError != nil {
+		return nil, tokenError
+	}
+
+	if r.match(scanning.EQUAL) {
+		initializer, err := r.expression()
+		if err != nil {
+			return nil, err
+		}
+		_, tokenError := r.consume(scanning.SEMICOLON, expectedSemicolonMsg)
+
+		return &statement.Var{
+			Name:        identifier,
+			Initializer: &initializer,
+		}, tokenError
+	}
+	_, tokenError = r.consume(scanning.SEMICOLON, expectedSemicolonMsg)
+	return &statement.Var{
+		Name: identifier,
+	}, tokenError
+}
+
 func (r *Parser) statement() (statement.Stmt, *TokenError) {
 	if r.match(scanning.PRINT) {
 		return r.printStatement()
@@ -54,7 +100,7 @@ func (r *Parser) statement() (statement.Stmt, *TokenError) {
 }
 
 func (r *Parser) expression() (expression.Expr, *TokenError) {
-	return r.equality()
+	return r.assignment()
 }
 
 func (r *Parser) equality() (expression.Expr, *TokenError) {
@@ -64,9 +110,9 @@ func (r *Parser) equality() (expression.Expr, *TokenError) {
 		operator := r.previous()
 		right, err := r.comparison()
 		return &expression.Binary{
-			Left:     expr,
+			Left:     &expr,
 			Operator: operator,
-			Right:    right,
+			Right:    &right,
 		}, err
 	}
 	return expr, err
@@ -79,9 +125,9 @@ func (r *Parser) comparison() (expression.Expr, *TokenError) {
 		operator := r.previous()
 		right, err := r.term()
 		return &expression.Binary{
-			Left:     expr,
+			Left:     &expr,
 			Operator: operator,
-			Right:    right,
+			Right:    &right,
 		}, err
 	}
 	return expr, err
@@ -94,9 +140,9 @@ func (r *Parser) term() (expression.Expr, *TokenError) {
 		operator := r.previous()
 		right, err := r.term()
 		return &expression.Binary{
-			Left:     expr,
+			Left:     &expr,
 			Operator: operator,
-			Right:    right,
+			Right:    &right,
 		}, err
 	}
 	return expr, err
@@ -109,9 +155,9 @@ func (r *Parser) factor() (expression.Expr, *TokenError) {
 		operator := r.previous()
 		right, err := r.term()
 		return &expression.Binary{
-			Left:     expr,
+			Left:     &expr,
 			Operator: operator,
-			Right:    right,
+			Right:    &right,
 		}, err
 	}
 	return expr, err
@@ -123,7 +169,7 @@ func (r *Parser) unary() (expression.Expr, *TokenError) {
 		right, err := r.unary()
 		return &expression.Unary{
 			Operator: operator,
-			Right:    right,
+			Right:    &right,
 		}, err
 	}
 	return r.primary()
@@ -144,26 +190,45 @@ func (r *Parser) primary() (expression.Expr, *TokenError) {
 		return &expression.Literal{Value: r.previous().Literal}, nil
 	}
 
+	if r.match(scanning.IDENTIFIER) {
+		prev := r.previous()
+		return &expression.Var{
+			Name: prev,
+		}, nil
+	}
+
 	if r.match(scanning.LEFT_PAREN) {
 		expr, tokenErr := r.expression()
 		_, tokenErr = r.consume(scanning.RIGHT_PAREN, "expected ) after Expression")
 		if tokenErr != nil {
 			return nil, tokenErr
 		}
-		return &expression.Grouping{Expression: expr}, nil
+		return &expression.Grouping{Expression: &expr}, nil
 	}
 	return nil, nil
 }
 
-func (r *Parser) consume(t scanning.TokenType, message string) (scanning.Token, *TokenError) {
+func (r *Parser) consume(t scanning.TokenType, message string) (*scanning.Token, *TokenError) {
 	if r.check(t) {
 		return r.advance(), nil
 	}
 	peek := r.peek()
-	return scanning.Token{}, &TokenError{
+	return nil, &TokenError{
 		error: errors.New(message),
-		Token: &peek,
+		Token: peek,
 	}
+}
+
+func (r *Parser) consumeExpression() (expression.Expr, *TokenError) {
+	value, tokenError := r.expression()
+	if tokenError != nil {
+		return nil, tokenError
+	}
+	_, tokenError = r.consume(scanning.SEMICOLON, expectedSemicolonMsg)
+	if tokenError != nil {
+		return nil, tokenError
+	}
+	return value, nil
 }
 
 func (r *Parser) match(types ...scanning.TokenType) bool {
@@ -184,24 +249,24 @@ func (r *Parser) check(t scanning.TokenType) bool {
 	}
 }
 
-func (r *Parser) previous() scanning.Token {
+func (r *Parser) previous() *scanning.Token {
 	// TODO: add some check for out of bounds error
-	return r.tokens[r.current-1]
+	return &r.tokens[r.current-1]
 }
 
 func (r *Parser) isAtEnd() bool {
 	return r.peek().TokenType == scanning.EOF
 }
 
-func (r *Parser) advance() scanning.Token {
+func (r *Parser) advance() *scanning.Token {
 	if !r.isAtEnd() {
 		r.current++
 	}
 	return r.previous()
 }
 
-func (r *Parser) peek() scanning.Token {
-	return r.tokens[r.current]
+func (r *Parser) peek() *scanning.Token {
+	return &r.tokens[r.current]
 }
 
 func (r *Parser) synchronize() {
@@ -240,14 +305,30 @@ func (r *Parser) expressionStatement() (statement.Stmt, *TokenError) {
 	}, err
 }
 
-func (r *Parser) consumeExpression() (expression.Expr, *TokenError) {
-	value, tokenError := r.expression()
+func (r *Parser) assignment() (expression.Expr, *TokenError) {
+	expr, tokenError := r.equality()
 	if tokenError != nil {
 		return nil, tokenError
 	}
-	_, tokenError = r.consume(scanning.SEMICOLON, "expected ; after statement")
-	if tokenError != nil {
-		return nil, tokenError
+	if r.match(scanning.EQUAL) {
+		eq := r.previous()
+		value, tokenError := r.assignment()
+		if tokenError != nil {
+			return nil, tokenError
+		}
+
+		if _, ok := expr.(*expression.Var); ok {
+			name := expr.(*expression.Var).Name
+			return &expression.Assign{
+				Name:  name,
+				Value: value,
+			}, nil
+		} else {
+			return nil, &TokenError{
+				error: invalidAssignmentTarget,
+				Token: eq,
+			}
+		}
 	}
-	return value, nil
+	return expr, nil
 }

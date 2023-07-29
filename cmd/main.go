@@ -3,11 +3,14 @@ package main
 import (
 	"fmt"
 	"gox/cmd/gox"
+	"gox/internal/runtime"
 	"os"
 )
 
 func main() {
-	interpreter := gox.Gox{}
+	interpreter := gox.Gox{
+		Interpreter: runtime.NewInterpreter(),
+	}
 
 	args := os.Args[1:]
 
