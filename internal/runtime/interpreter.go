@@ -3,14 +3,10 @@ package runtime
 import (
 	"errors"
 	"fmt"
-	"gox/internal/parsing"
+	"gox/internal"
+	ast2 "gox/internal/ast"
 	"gox/internal/scanning"
 )
-
-type RuntimeError struct {
-	error
-	Token *scanning.Token
-}
 
 // TODO: write tests
 type Interpreter struct {
@@ -19,13 +15,11 @@ type Interpreter struct {
 
 func NewInterpreter() *Interpreter {
 	return &Interpreter{
-		env: &environment{
-			values: make(map[string]any),
-		},
+		env: newEnvironment(nil),
 	}
 }
 
-func (r *Interpreter) Interpret(statements []*parsing.Stmt) *RuntimeError {
+func (r *Interpreter) Interpret(statements []*ast2.Stmt) *internal.RuntimeError {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Printf("unable to interpret given code: %s", err)
@@ -37,18 +31,18 @@ func (r *Interpreter) Interpret(statements []*parsing.Stmt) *RuntimeError {
 		}
 		err := r.execute(*stmt)
 		if err != nil {
-			return err.(*RuntimeError)
+			return err
 		}
 	}
 	return nil
 }
 
 // expressions
-func (r *Interpreter) VisitForLiteral(expr *parsing.Literal) (any, error) {
+func (r *Interpreter) VisitForLiteral(expr *ast2.Literal) (any, *internal.RuntimeError) {
 	return expr.Value, nil
 }
 
-func (r *Interpreter) VisitForUnary(expr *parsing.Unary) (any, error) {
+func (r *Interpreter) VisitForUnary(expr *ast2.Unary) (any, *internal.RuntimeError) {
 	right, err := r.evaluate(*expr.Right)
 	if err != nil {
 		return nil, err
@@ -64,7 +58,7 @@ func (r *Interpreter) VisitForUnary(expr *parsing.Unary) (any, error) {
 	return nil, nil
 }
 
-func (r *Interpreter) VisitForBinary(expr *parsing.Binary) (any, error) {
+func (r *Interpreter) VisitForBinary(expr *ast2.Binary) (any, *internal.RuntimeError) {
 	left, err := r.evaluate(*expr.Left)
 	if err != nil {
 		return nil, err
@@ -135,46 +129,37 @@ func (r *Interpreter) VisitForBinary(expr *parsing.Binary) (any, error) {
 	return nil, nil
 }
 
-func (r *Interpreter) VisitForGrouping(expr *parsing.Grouping) (any, error) {
+func (r *Interpreter) VisitForGrouping(expr *ast2.Grouping) (any, *internal.RuntimeError) {
 	return r.evaluate(*expr.Expression)
 }
 
-func (r *Interpreter) VisitForVariableExpression(expr *parsing.VarExpr) (any, error) {
+func (r *Interpreter) VisitForVariableExpression(expr *ast2.VarExpr) (any, *internal.RuntimeError) {
 	res, err := r.env.get(expr.Name)
 	if err != nil {
-		return nil, &RuntimeError{
-			error: err,
-			Token: expr.Name,
-		}
+		return nil, err
 	}
 	return res, nil
 }
 
-func (r *Interpreter) VisitForAssignExpression(expr *parsing.Assign) (any, error) {
+func (r *Interpreter) VisitForAssignExpression(expr *ast2.Assign) (any, *internal.RuntimeError) {
 	val, err := r.evaluate(expr.Value)
 	if err != nil {
-		return nil, &RuntimeError{
-			error: err,
-			Token: expr.Name,
-		}
+		return nil, err
 	}
 	err = r.env.assign(expr.Name, val)
 	if err != nil {
-		return nil, &RuntimeError{
-			error: err,
-			Token: expr.Name,
-		}
+		return nil, err
 	}
 	return val, nil
 }
 
 // statements
-func (r *Interpreter) VisitForExpression(stmt *parsing.Expression) error {
+func (r *Interpreter) VisitForExpression(stmt *ast2.Expression) *internal.RuntimeError {
 	_, err := r.evaluate(*stmt.Expression)
 	return err
 }
 
-func (r *Interpreter) VisitForPrint(stmt *parsing.Print) error {
+func (r *Interpreter) VisitForPrint(stmt *ast2.Print) *internal.RuntimeError {
 	value, err := r.evaluate(*stmt.Expression)
 	if err == nil {
 		fmt.Println(toString(value))
@@ -182,7 +167,7 @@ func (r *Interpreter) VisitForPrint(stmt *parsing.Print) error {
 	return err
 }
 
-func (r *Interpreter) VisitForVar(stmt *parsing.Var) error {
+func (r *Interpreter) VisitForVar(stmt *ast2.Var) *internal.RuntimeError {
 	if stmt.Initializer != nil {
 		value, err := r.evaluate(*stmt.Initializer)
 		if err != nil {
@@ -195,7 +180,11 @@ func (r *Interpreter) VisitForVar(stmt *parsing.Var) error {
 	return nil
 }
 
-func (r *Interpreter) evaluate(expr parsing.Expr) (any, error) {
+func (r *Interpreter) VisitForBlock(block *ast2.Block) *internal.RuntimeError {
+	return r.executeBlock(block.Statements, newEnvironment(r.env))
+}
+
+func (r *Interpreter) evaluate(expr ast2.Expr) (any, *internal.RuntimeError) {
 	return expr.Accept(r)
 }
 
@@ -213,30 +202,50 @@ func (r *Interpreter) isEqual(a, b any) bool {
 	return (a == nil && b == nil) && (a == b)
 }
 
-func (r *Interpreter) checkNumberOperand(operator *scanning.Token, operand any) error {
+func (r *Interpreter) checkNumberOperand(operator *scanning.Token, operand any) *internal.RuntimeError {
 	if _, ok := operand.(float64); ok {
 		return nil
 	}
-	return &RuntimeError{
-		error: errors.New("operand must be number"),
+	return &internal.RuntimeError{
+		Error: errors.New("operand must be number"),
 		Token: operator,
 	}
 }
 
-func (r *Interpreter) checkNumberOperands(operator scanning.Token, operand1, operand2 any) error {
+func (r *Interpreter) checkNumberOperands(operator scanning.Token, operand1, operand2 any) *internal.RuntimeError {
 	if _, ok := operand1.(float64); ok {
 		if _, ok := operand2.(float64); ok {
 			return nil
 		}
 	}
-	return &RuntimeError{
-		error: errors.New("both operands must be numbers"),
+	return &internal.RuntimeError{
+		Error: errors.New("both operands must be numbers"),
 		Token: &operator,
 	}
 }
 
-func (r *Interpreter) execute(stmt parsing.Stmt) error {
+func (r *Interpreter) execute(stmt ast2.Stmt) *internal.RuntimeError {
 	return stmt.Accept(r)
+}
+
+func (r *Interpreter) executeBlock(statements []*ast2.Stmt, env *environment) *internal.RuntimeError {
+	prevEnv := r.env
+
+	// after execution
+	defer func() {
+		r.env = prevEnv
+	}()
+
+	r.env = env
+
+	for _, statement := range statements {
+		err := r.execute(*statement)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func toString(a any) string {

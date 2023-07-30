@@ -2,11 +2,15 @@ package parsing
 
 import (
 	"errors"
+	ast2 "gox/internal/ast"
 	"gox/internal/scanning"
 )
 
 const (
-	expectedSemicolonMsg = "expected ; after statement"
+	expectedSemicolonMsg  = "expected ; after statement"
+	missingRightParenMsg  = "expected ) after expression"
+	varNameExpectedMsg    = "expected variable name"
+	expectedRightBraceMsg = "expected } after block"
 )
 
 var (
@@ -35,8 +39,8 @@ func NewParser(tokens []scanning.Token) *Parser {
 	}
 }
 
-func (r *Parser) Parse() ([]*Stmt, *ParseError) {
-	var res = make([]*Stmt, 0)
+func (r *Parser) Parse() ([]*ast2.Stmt, *ParseError) {
+	var res = make([]*ast2.Stmt, 0)
 	for !r.isAtEnd() {
 		stmt, err := r.declaration()
 		if err != nil {
@@ -51,7 +55,7 @@ func (r *Parser) Parse() ([]*Stmt, *ParseError) {
 	return res, nil
 }
 
-func (r *Parser) declaration() (Stmt, *TokenError) {
+func (r *Parser) declaration() (ast2.Stmt, *TokenError) {
 	if r.match(scanning.VAR) {
 		declaration, tokenError := r.varDeclaration()
 		if tokenError != nil {
@@ -65,8 +69,8 @@ func (r *Parser) declaration() (Stmt, *TokenError) {
 	}
 }
 
-func (r *Parser) varDeclaration() (Stmt, *TokenError) {
-	identifier, tokenError := r.consume(scanning.IDENTIFIER, "expected variable name")
+func (r *Parser) varDeclaration() (ast2.Stmt, *TokenError) {
+	identifier, tokenError := r.consume(scanning.IDENTIFIER, varNameExpectedMsg)
 	if tokenError != nil {
 		return nil, tokenError
 	}
@@ -78,36 +82,39 @@ func (r *Parser) varDeclaration() (Stmt, *TokenError) {
 		}
 		_, tokenError := r.consume(scanning.SEMICOLON, expectedSemicolonMsg)
 
-		return &Var{
+		return &ast2.Var{
 			Name:        identifier,
 			Initializer: &initializer,
 		}, tokenError
 	}
 	_, tokenError = r.consume(scanning.SEMICOLON, expectedSemicolonMsg)
-	return &Var{
+	return &ast2.Var{
 		Name: identifier,
 	}, tokenError
 }
 
-func (r *Parser) statement() (Stmt, *TokenError) {
+func (r *Parser) statement() (ast2.Stmt, *TokenError) {
 	if r.match(scanning.PRINT) {
 		return r.printStatement()
-	} else {
-		return r.expressionStatement()
 	}
+	if r.match(scanning.LEFT_BRACE) {
+		return r.block()
+	}
+	return r.expressionStatement()
+
 }
 
-func (r *Parser) expression() (Expr, *TokenError) {
+func (r *Parser) expression() (ast2.Expr, *TokenError) {
 	return r.assignment()
 }
 
-func (r *Parser) equality() (Expr, *TokenError) {
+func (r *Parser) equality() (ast2.Expr, *TokenError) {
 	expr, err := r.comparison()
 
 	for r.match(scanning.BANG, scanning.BANG_EQUAL) {
 		operator := r.previous()
 		right, err := r.comparison()
-		return &Binary{
+		return &ast2.Binary{
 			Left:     &expr,
 			Operator: operator,
 			Right:    &right,
@@ -116,13 +123,13 @@ func (r *Parser) equality() (Expr, *TokenError) {
 	return expr, err
 }
 
-func (r *Parser) comparison() (Expr, *TokenError) {
+func (r *Parser) comparison() (ast2.Expr, *TokenError) {
 	expr, err := r.term()
 
 	for r.match(scanning.GREATER, scanning.GREATER_EQUAL, scanning.LESS, scanning.LESS_EQUAL) {
 		operator := r.previous()
 		right, err := r.term()
-		return &Binary{
+		return &ast2.Binary{
 			Left:     &expr,
 			Operator: operator,
 			Right:    &right,
@@ -131,13 +138,13 @@ func (r *Parser) comparison() (Expr, *TokenError) {
 	return expr, err
 }
 
-func (r *Parser) term() (Expr, *TokenError) {
+func (r *Parser) term() (ast2.Expr, *TokenError) {
 	expr, err := r.factor()
 
 	for r.match(scanning.MINUS, scanning.PLUS) {
 		operator := r.previous()
 		right, err := r.term()
-		return &Binary{
+		return &ast2.Binary{
 			Left:     &expr,
 			Operator: operator,
 			Right:    &right,
@@ -146,13 +153,13 @@ func (r *Parser) term() (Expr, *TokenError) {
 	return expr, err
 }
 
-func (r *Parser) factor() (Expr, *TokenError) {
+func (r *Parser) factor() (ast2.Expr, *TokenError) {
 	expr, err := r.unary()
 
 	for r.match(scanning.SLASH, scanning.STAR) {
 		operator := r.previous()
 		right, err := r.term()
-		return &Binary{
+		return &ast2.Binary{
 			Left:     &expr,
 			Operator: operator,
 			Right:    &right,
@@ -161,11 +168,11 @@ func (r *Parser) factor() (Expr, *TokenError) {
 	return expr, err
 }
 
-func (r *Parser) unary() (Expr, *TokenError) {
+func (r *Parser) unary() (ast2.Expr, *TokenError) {
 	for r.match(scanning.BANG, scanning.MINUS) {
 		operator := r.previous()
 		right, err := r.unary()
-		return &Unary{
+		return &ast2.Unary{
 			Operator: operator,
 			Right:    &right,
 		}, err
@@ -173,35 +180,35 @@ func (r *Parser) unary() (Expr, *TokenError) {
 	return r.primary()
 }
 
-func (r *Parser) primary() (Expr, *TokenError) {
+func (r *Parser) primary() (ast2.Expr, *TokenError) {
 	if r.match(scanning.FALSE) {
-		return &Literal{Value: false}, nil
+		return &ast2.Literal{Value: false}, nil
 	}
 	if r.match(scanning.TRUE) {
-		return &Literal{Value: true}, nil
+		return &ast2.Literal{Value: true}, nil
 	}
 	if r.match(scanning.NIL) {
-		return &Literal{Value: nil}, nil
+		return &ast2.Literal{Value: nil}, nil
 	}
 
 	if r.match(scanning.NUMBER, scanning.STRING) {
-		return &Literal{Value: r.previous().Literal}, nil
+		return &ast2.Literal{Value: r.previous().Literal}, nil
 	}
 
 	if r.match(scanning.IDENTIFIER) {
 		prev := r.previous()
-		return &VarExpr{
+		return &ast2.VarExpr{
 			Name: prev,
 		}, nil
 	}
 
 	if r.match(scanning.LEFT_PAREN) {
 		expr, tokenErr := r.expression()
-		_, tokenErr = r.consume(scanning.RIGHT_PAREN, "expected ) after Expression")
+		_, tokenErr = r.consume(scanning.RIGHT_PAREN, missingRightParenMsg)
 		if tokenErr != nil {
 			return nil, tokenErr
 		}
-		return &Grouping{Expression: &expr}, nil
+		return &ast2.Grouping{Expression: &expr}, nil
 	}
 	return nil, nil
 }
@@ -217,7 +224,7 @@ func (r *Parser) consume(t scanning.TokenType, message string) (*scanning.Token,
 	}
 }
 
-func (r *Parser) consumeExpression() (Expr, *TokenError) {
+func (r *Parser) consumeExpression() (ast2.Expr, *TokenError) {
 	value, tokenError := r.expression()
 	if tokenError != nil {
 		return nil, tokenError
@@ -289,21 +296,21 @@ func (r *Parser) synchronize() {
 	r.advance()
 }
 
-func (r *Parser) printStatement() (Stmt, *TokenError) {
+func (r *Parser) printStatement() (ast2.Stmt, *TokenError) {
 	expr, err := r.consumeExpression()
-	return &Print{
+	return &ast2.Print{
 		Expression: &expr,
 	}, err
 }
 
-func (r *Parser) expressionStatement() (Stmt, *TokenError) {
+func (r *Parser) expressionStatement() (ast2.Stmt, *TokenError) {
 	expr, err := r.consumeExpression()
-	return &Expression{
+	return &ast2.Expression{
 		Expression: &expr,
 	}, err
 }
 
-func (r *Parser) assignment() (Expr, *TokenError) {
+func (r *Parser) assignment() (ast2.Expr, *TokenError) {
 	expr, tokenError := r.equality()
 	if tokenError != nil {
 		return nil, tokenError
@@ -315,9 +322,9 @@ func (r *Parser) assignment() (Expr, *TokenError) {
 			return nil, tokenError
 		}
 
-		if _, ok := expr.(*VarExpr); ok {
-			name := expr.(*VarExpr).Name
-			return &Assign{
+		if _, ok := expr.(*ast2.VarExpr); ok {
+			name := expr.(*ast2.VarExpr).Name
+			return &ast2.Assign{
 				Name:  name,
 				Value: value,
 			}, nil
@@ -329,4 +336,21 @@ func (r *Parser) assignment() (Expr, *TokenError) {
 		}
 	}
 	return expr, nil
+}
+
+func (r *Parser) block() (*ast2.Block, *TokenError) {
+	res := make([]*ast2.Stmt, 0)
+	for !r.check(scanning.RIGHT_BRACE) && !r.isAtEnd() {
+		declaration, tokenError := r.declaration()
+		if tokenError != nil {
+			return nil, tokenError
+		}
+		res = append(res, &declaration)
+	}
+
+	_, err := r.consume(scanning.RIGHT_BRACE, expectedRightBraceMsg)
+	if err != nil {
+		return nil, err
+	}
+	return &ast2.Block{Statements: res}, nil
 }

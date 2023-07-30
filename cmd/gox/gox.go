@@ -59,7 +59,7 @@ func (r *Gox) run(source string) error {
 	}
 	interpreterErr := r.Interpreter.Interpret(ast)
 	if interpreterErr != nil {
-		ReportError(interpreterErr.Token.Line, interpreterErr.Error(), "")
+		ReportError(interpreterErr.Token.Line, interpreterErr.Error.Error(), "")
 	}
 	return nil
 }
