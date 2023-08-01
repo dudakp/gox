@@ -7,10 +7,11 @@ import (
 )
 
 const (
-	expectedSemicolonMsg  = "expected ; after statement"
-	missingRightParenMsg  = "expected ) after expression"
-	varNameExpectedMsg    = "expected variable name"
-	expectedRightBraceMsg = "expected } after block"
+	expectedSemicolonMsg       = "expected ; after statement"
+	missingRightParenMsg       = "expected ) after expression"
+	varNameExpectedMsg         = "expected variable name"
+	expectedRightBraceMsg      = "expected } after block"
+	missingLeftParenAfterIfMsg = "expected ( after 'if' "
 )
 
 var (
@@ -94,6 +95,9 @@ func (r *Parser) varDeclaration() (ast2.Stmt, *TokenError) {
 }
 
 func (r *Parser) statement() (ast2.Stmt, *TokenError) {
+	if r.match(scanning.IF) {
+		return r.ifStatement()
+	}
 	if r.match(scanning.PRINT) {
 		return r.printStatement()
 	}
@@ -111,7 +115,7 @@ func (r *Parser) expression() (ast2.Expr, *TokenError) {
 func (r *Parser) equality() (ast2.Expr, *TokenError) {
 	expr, err := r.comparison()
 
-	for r.match(scanning.BANG, scanning.BANG_EQUAL) {
+	for r.match(scanning.EQUAL_EQUAL, scanning.BANG_EQUAL) {
 		operator := r.previous()
 		right, err := r.comparison()
 		return &ast2.Binary{
@@ -353,4 +357,34 @@ func (r *Parser) block() (*ast2.Block, *TokenError) {
 		return nil, err
 	}
 	return &ast2.Block{Statements: res}, nil
+}
+
+func (r *Parser) ifStatement() (ast2.Stmt, *TokenError) {
+	_, err := r.consume(scanning.LEFT_PAREN, missingLeftParenAfterIfMsg)
+	if err != nil {
+		return nil, err
+	}
+	condition, err := r.expression()
+	if err != nil {
+		return nil, err
+	}
+	_, err = r.consume(scanning.RIGHT_PAREN, missingRightParenMsg)
+	if err != nil {
+		return nil, err
+	}
+
+	var elseStmt ast2.Stmt
+	then, err := r.statement()
+	if err != nil {
+		return nil, err
+	}
+	if r.match(scanning.ELSE) {
+		elseStmt, err = r.statement()
+	}
+
+	return &ast2.If{
+		Condition: condition,
+		Then:      then,
+		Else:      elseStmt,
+	}, nil
 }

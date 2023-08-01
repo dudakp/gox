@@ -10,6 +10,7 @@ type StmtVisitor interface {
 	VisitForPrint(stmt *Print) *internal.RuntimeError
 	VisitForVar(stmt *Var) *internal.RuntimeError
 	VisitForBlock(block *Block) *internal.RuntimeError
+	VisitForIf(ifStmt *If) *internal.RuntimeError
 }
 type Stmt interface {
 	Accept(visitor StmtVisitor) *internal.RuntimeError
@@ -50,4 +51,15 @@ type Block struct {
 
 func (r *Block) Accept(visitor StmtVisitor) *internal.RuntimeError {
 	return visitor.VisitForBlock(r)
+}
+
+// If
+type If struct {
+	Condition Expr
+	Then      Stmt
+	Else      Stmt
+}
+
+func (r *If) Accept(visitor StmtVisitor) *internal.RuntimeError {
+	return visitor.VisitForIf(r)
 }

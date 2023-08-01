@@ -1,23 +1,8 @@
-var a = "global a";
-var b = "global b";
-var c = "global c";
-{
-  var a = "outer a";
-  var b = "outer b";
-  print undefined;
-  {
-    var a = "inner a";
-    print a;
-    print b;
-    print c;
-    print undefined;
-  }
-  print a;
-  print b;
-  print c;
-  print undefined;
-}
+var a = "hello";
 print a;
-print b;
-print c;
-print undefined;
+
+if (a == "hello") {
+    print "world";
+} else {
+    print "bitch";
+}

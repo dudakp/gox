@@ -6,6 +6,7 @@ import (
 	"gox/internal"
 	ast2 "gox/internal/ast"
 	"gox/internal/scanning"
+	"strings"
 )
 
 // TODO: write tests
@@ -69,6 +70,26 @@ func (r *Interpreter) VisitForBinary(expr *ast2.Binary) (any, *internal.RuntimeE
 	}
 
 	switch expr.Operator.TokenType {
+	case scanning.EQUAL_EQUAL:
+		bothOperandsAreSting := checkBothOperandsAreString(left, right)
+		if bothOperandsAreSting {
+			return strings.Compare(left.(string), right.(string)) == 0, nil
+		} else {
+			if err = r.checkNumberOperands(*expr.Operator, left, right); err != nil {
+				return nil, err
+			}
+			return r.isEqual(left, right), nil
+		}
+	case scanning.BANG_EQUAL:
+		bothOperandsAreSting := checkBothOperandsAreString(left, right)
+		if bothOperandsAreSting {
+			return !(strings.Compare(left.(string), right.(string)) == 0), nil
+		} else {
+			if err = r.checkNumberOperands(*expr.Operator, left, right); err != nil {
+				return nil, err
+			}
+			return !r.isEqual(left, right), nil
+		}
 	case scanning.GREATER:
 		if err = r.checkNumberOperands(*expr.Operator, left, right); err != nil {
 			return nil, err
@@ -89,25 +110,14 @@ func (r *Interpreter) VisitForBinary(expr *ast2.Binary) (any, *internal.RuntimeE
 			return nil, err
 		}
 		return left.(float64) <= right.(float64), nil
-	case scanning.EQUAL:
-		if err = r.checkNumberOperands(*expr.Operator, left, right); err != nil {
-			return nil, err
-		}
-		return r.isEqual(left, right), nil
-	case scanning.BANG_EQUAL:
-		if err = r.checkNumberOperands(*expr.Operator, left, right); err != nil {
-			return nil, err
-		}
-		return !r.isEqual(left, right), nil
 	case scanning.MINUS:
 		if err = r.checkNumberOperands(*expr.Operator, left, right); err != nil {
 			return nil, err
 		}
 		return left.(float64) - right.(float64), nil
 	case scanning.PLUS:
-		_, leftIsString := left.(string)
-		_, rightIsString := right.(string)
-		if leftIsString && rightIsString {
+		bothOperandsAreSting := checkBothOperandsAreString(left, right)
+		if bothOperandsAreSting {
 			return fmt.Sprint(left.(string) + right.(string)), nil
 		} else {
 			if err = r.checkNumberOperands(*expr.Operator, left, right); err != nil {
@@ -184,6 +194,19 @@ func (r *Interpreter) VisitForBlock(block *ast2.Block) *internal.RuntimeError {
 	return r.executeBlock(block.Statements, newEnvironment(r.env))
 }
 
+func (r *Interpreter) VisitForIf(ifStmt *ast2.If) *internal.RuntimeError {
+	conditionRes, err := r.evaluate(ifStmt.Condition)
+	if err != nil {
+		return err
+	}
+	if r.isTruthy(conditionRes) {
+		r.execute(ifStmt.Then)
+	} else if ifStmt.Else != nil {
+		r.execute(ifStmt.Else)
+	}
+	return nil
+}
+
 func (r *Interpreter) evaluate(expr ast2.Expr) (any, *internal.RuntimeError) {
 	return expr.Accept(r)
 }
@@ -210,6 +233,13 @@ func (r *Interpreter) checkNumberOperand(operator *scanning.Token, operand any) 
 		Error: errors.New("operand must be number"),
 		Token: operator,
 	}
+}
+
+func checkBothOperandsAreString(left any, right any) bool {
+	_, leftIsString := left.(string)
+	_, rightIsString := right.(string)
+	bothOperandsAreSting := leftIsString && rightIsString
+	return bothOperandsAreSting
 }
 
 func (r *Interpreter) checkNumberOperands(operator scanning.Token, operand1, operand2 any) *internal.RuntimeError {
