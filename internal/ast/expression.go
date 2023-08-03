@@ -12,6 +12,7 @@ type ExprVisitor interface {
 	VisitForGrouping(expr *Grouping) (any, *internal.RuntimeError)
 	VisitForVariableExpression(expr *VarExpr) (any, *internal.RuntimeError)
 	VisitForAssignExpression(expr *Assign) (any, *internal.RuntimeError)
+	VisitForLogical(expr *Logical) (any, *internal.RuntimeError)
 }
 
 type Expr interface {
@@ -74,4 +75,15 @@ type Assign struct {
 
 func (r *Assign) Accept(visitor ExprVisitor) (any, *internal.RuntimeError) {
 	return visitor.VisitForAssignExpression(r)
+}
+
+// Logical
+type Logical struct {
+	Left     Expr
+	Operator *scanning.Token
+	Right    Expr
+}
+
+func (r *Logical) Accept(visitor ExprVisitor) (any, *internal.RuntimeError) {
+	return visitor.VisitForLogical(r)
 }

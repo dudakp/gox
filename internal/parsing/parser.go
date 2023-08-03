@@ -315,7 +315,7 @@ func (r *Parser) expressionStatement() (ast2.Stmt, *TokenError) {
 }
 
 func (r *Parser) assignment() (ast2.Expr, *TokenError) {
-	expr, tokenError := r.equality()
+	expr, tokenError := r.or()
 	if tokenError != nil {
 		return nil, tokenError
 	}
@@ -338,6 +338,46 @@ func (r *Parser) assignment() (ast2.Expr, *TokenError) {
 				Token: eq,
 			}
 		}
+	}
+	return expr, nil
+}
+
+func (r *Parser) or() (ast2.Expr, *TokenError) {
+	expr, tokenError := r.and()
+	if tokenError != nil {
+		return nil, tokenError
+	}
+	for r.match(scanning.OR) {
+		operator := r.previous()
+		right, tokenErr := r.and()
+		if tokenErr != nil {
+			return nil, tokenErr
+		}
+		return &ast2.Logical{
+			Left:     expr,
+			Operator: operator,
+			Right:    right,
+		}, nil
+	}
+	return expr, nil
+}
+
+func (r *Parser) and() (ast2.Expr, *TokenError) {
+	expr, tokenError := r.equality()
+	if tokenError != nil {
+		return nil, tokenError
+	}
+	for r.match(scanning.AND) {
+		operator := r.previous()
+		right, tokenErr := r.equality()
+		if tokenErr != nil {
+			return nil, tokenErr
+		}
+		return &ast2.Logical{
+			Left:     expr,
+			Operator: operator,
+			Right:    right,
+		}, nil
 	}
 	return expr, nil
 }

@@ -163,6 +163,25 @@ func (r *Interpreter) VisitForAssignExpression(expr *ast2.Assign) (any, *interna
 	return val, nil
 }
 
+func (r *Interpreter) VisitForLogical(expr *ast2.Logical) (any, *internal.RuntimeError) {
+	left, err := r.evaluate(expr.Left)
+	if err != nil {
+		return nil, err
+	}
+
+	if expr.Operator.TokenType == scanning.OR {
+		if r.isTruthy(left) {
+			return left, nil
+		}
+	} else {
+		if !r.isTruthy(left) {
+			return left, nil
+		}
+	}
+
+	return r.evaluate(expr.Right)
+}
+
 // statements
 func (r *Interpreter) VisitForExpression(stmt *ast2.Expression) *internal.RuntimeError {
 	_, err := r.evaluate(*stmt.Expression)
@@ -217,6 +236,10 @@ func (r *Interpreter) isTruthy(right any) bool {
 	}
 	if _, ok := right.(bool); ok {
 		return right.(bool)
+	} else {
+		if _, ok := right.(string); ok {
+			return len(right.(string)) > 0
+		}
 	}
 	return false
 }

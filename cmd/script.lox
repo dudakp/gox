@@ -6,3 +6,6 @@ if (a == "hello") {
 } else {
     print "bitch";
 }
+
+print "hi" or 2; // "hi"
+print nil or "yes"; // "yes"
