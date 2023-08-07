@@ -226,6 +226,24 @@ func (r *Interpreter) VisitForIf(ifStmt *ast2.If) *internal.RuntimeError {
 	return nil
 }
 
+func (r *Interpreter) VisitForWhile(while *ast2.While) *internal.RuntimeError {
+	conditionRes, err := r.evaluate(while.Condition)
+	if err != nil {
+		return err
+	}
+	for r.isTruthy(conditionRes) {
+		err := r.execute(while.Statement)
+		if err != nil {
+			return err
+		}
+		conditionRes, err = r.evaluate(while.Condition)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *Interpreter) evaluate(expr ast2.Expr) (any, *internal.RuntimeError) {
 	return expr.Accept(r)
 }
@@ -281,7 +299,7 @@ func (r *Interpreter) execute(stmt ast2.Stmt) *internal.RuntimeError {
 	return stmt.Accept(r)
 }
 
-func (r *Interpreter) executeBlock(statements []*ast2.Stmt, env *environment) *internal.RuntimeError {
+func (r *Interpreter) executeBlock(statements []ast2.Stmt, env *environment) *internal.RuntimeError {
 	prevEnv := r.env
 
 	// after execution
@@ -292,7 +310,7 @@ func (r *Interpreter) executeBlock(statements []*ast2.Stmt, env *environment) *i
 	r.env = env
 
 	for _, statement := range statements {
-		err := r.execute(*statement)
+		err := r.execute(statement)
 		if err != nil {
 			return err
 		}

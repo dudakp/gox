@@ -11,6 +11,7 @@ type StmtVisitor interface {
 	VisitForVar(stmt *Var) *internal.RuntimeError
 	VisitForBlock(block *Block) *internal.RuntimeError
 	VisitForIf(ifStmt *If) *internal.RuntimeError
+	VisitForWhile(while *While) *internal.RuntimeError
 }
 type Stmt interface {
 	Accept(visitor StmtVisitor) *internal.RuntimeError
@@ -46,7 +47,7 @@ func (r *Var) Accept(visitor StmtVisitor) *internal.RuntimeError {
 
 // Block
 type Block struct {
-	Statements []*Stmt
+	Statements []Stmt
 }
 
 func (r *Block) Accept(visitor StmtVisitor) *internal.RuntimeError {
@@ -62,4 +63,13 @@ type If struct {
 
 func (r *If) Accept(visitor StmtVisitor) *internal.RuntimeError {
 	return visitor.VisitForIf(r)
+}
+
+type While struct {
+	Condition Expr
+	Statement Stmt
+}
+
+func (r *While) Accept(visitor StmtVisitor) *internal.RuntimeError {
+	return visitor.VisitForWhile(r)
 }

@@ -7,11 +7,19 @@ import (
 )
 
 const (
-	expectedSemicolonMsg       = "expected ; after statement"
-	missingRightParenMsg       = "expected ) after expression"
-	varNameExpectedMsg         = "expected variable name"
-	expectedRightBraceMsg      = "expected } after block"
+	expectedSemicolonMsg  = "expected ; after statement"
+	missingRightParenMsg  = "expected ) after expression"
+	varNameExpectedMsg    = "expected variable name"
+	expectedRightBraceMsg = "expected } after block"
+
 	missingLeftParenAfterIfMsg = "expected ( after 'if' "
+
+	missingLeftParenAfterWhileMsg  = "expected ( after 'while' "
+	missingRightParenAfterWhileMsg = "expected ) after 'while' condition "
+
+	missingLeftParenAfterForMsg       = "expected ( after 'for' "
+	missingRightParenAfterForMsg      = "expected ) after for clause "
+	missingSemicolonAfterForCondition = "expected ; after for loop condition "
 )
 
 var (
@@ -95,8 +103,14 @@ func (r *Parser) varDeclaration() (ast2.Stmt, *TokenError) {
 }
 
 func (r *Parser) statement() (ast2.Stmt, *TokenError) {
+	if r.match(scanning.FOR) {
+		return r.forStatement()
+	}
 	if r.match(scanning.IF) {
 		return r.ifStatement()
+	}
+	if r.match(scanning.WHILE) {
+		return r.whileStatement()
 	}
 	if r.match(scanning.PRINT) {
 		return r.printStatement()
@@ -383,13 +397,13 @@ func (r *Parser) and() (ast2.Expr, *TokenError) {
 }
 
 func (r *Parser) block() (*ast2.Block, *TokenError) {
-	res := make([]*ast2.Stmt, 0)
+	res := make([]ast2.Stmt, 0)
 	for !r.check(scanning.RIGHT_BRACE) && !r.isAtEnd() {
 		declaration, tokenError := r.declaration()
 		if tokenError != nil {
 			return nil, tokenError
 		}
-		res = append(res, &declaration)
+		res = append(res, declaration)
 	}
 
 	_, err := r.consume(scanning.RIGHT_BRACE, expectedRightBraceMsg)
@@ -427,4 +441,102 @@ func (r *Parser) ifStatement() (ast2.Stmt, *TokenError) {
 		Then:      then,
 		Else:      elseStmt,
 	}, nil
+}
+
+func (r *Parser) whileStatement() (ast2.Stmt, *TokenError) {
+	_, err := r.consume(scanning.LEFT_PAREN, missingLeftParenAfterWhileMsg)
+	if err != nil {
+		return nil, err
+	}
+	condition, err := r.expression()
+	_, err = r.consume(scanning.RIGHT_PAREN, missingRightParenAfterWhileMsg)
+	if err != nil {
+		return nil, err
+	}
+
+	whileBody, err := r.statement()
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast2.While{
+		Condition: condition,
+		Statement: whileBody,
+	}, nil
+}
+
+func (r *Parser) forStatement() (ast2.Stmt, *TokenError) {
+	_, err := r.consume(scanning.LEFT_PAREN, missingLeftParenAfterForMsg)
+	if err != nil {
+		return nil, err
+	}
+
+	var initializer ast2.Stmt
+	var condition ast2.Expr
+	var increment ast2.Expr
+
+	if r.match(scanning.SEMICOLON) {
+		initializer = nil
+	} else if r.match(scanning.VAR) {
+		i, err := r.varDeclaration()
+		if err != nil {
+			return nil, err
+		}
+		initializer = i
+	} else {
+		i, err := r.expressionStatement()
+		if err != nil {
+			return nil, err
+		}
+		initializer = i
+	}
+
+	if !r.check(scanning.SEMICOLON) {
+		condition, err = r.expression()
+		if err != nil {
+			return nil, err
+		}
+	}
+	_, err = r.consume(scanning.SEMICOLON, missingSemicolonAfterForCondition)
+	if err != nil {
+		return nil, err
+	}
+
+	if !r.check(scanning.RIGHT_PAREN) {
+		increment, err = r.expression()
+		if err != nil {
+			return nil, err
+		}
+	}
+	_, err = r.consume(scanning.RIGHT_PAREN, missingRightParenAfterForMsg)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := r.statement()
+	if err != nil {
+		return nil, err
+	}
+
+	if increment != nil {
+		incrementExprStmt := ast2.Expression{Expression: &increment}
+		statements := []ast2.Stmt{body, &incrementExprStmt}
+		body = &ast2.Block{Statements: statements}
+	}
+
+	if condition == nil {
+		condition = &ast2.Literal{Value: true}
+	}
+	body = &ast2.While{
+		Condition: condition,
+		Statement: body,
+	}
+
+	if initializer != nil {
+		statements := []ast2.Stmt{initializer, body}
+		body = &ast2.Block{Statements: statements}
+	}
+
+	return body, err
+
 }
