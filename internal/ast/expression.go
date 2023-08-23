@@ -13,6 +13,7 @@ type ExprVisitor interface {
 	VisitForVariableExpression(expr *VarExpr) (any, *internal.RuntimeError)
 	VisitForAssignExpression(expr *Assign) (any, *internal.RuntimeError)
 	VisitForLogical(expr *Logical) (any, *internal.RuntimeError)
+	VisitForFunctionCall(expr *Call) (any, *internal.RuntimeError)
 }
 
 type Expr interface {
@@ -86,4 +87,15 @@ type Logical struct {
 
 func (r *Logical) Accept(visitor ExprVisitor) (any, *internal.RuntimeError) {
 	return visitor.VisitForLogical(r)
+}
+
+// Call
+type Call struct {
+	Callee Expr
+	Paren  *scanning.Token
+	Params []Expr
+}
+
+func (r *Call) Accept(visitor ExprVisitor) (any, *internal.RuntimeError) {
+	return visitor.VisitForFunctionCall(r)
 }

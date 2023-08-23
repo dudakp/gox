@@ -15,8 +15,13 @@ type Interpreter struct {
 }
 
 func NewInterpreter() *Interpreter {
+	glob := newEnvironment(nil)
+	for _, fn := range StdFunctions {
+		glob.define(fn.Name(), fn)
+	}
+
 	return &Interpreter{
-		env: newEnvironment(nil),
+		env: glob,
 	}
 }
 
@@ -182,6 +187,39 @@ func (r *Interpreter) VisitForLogical(expr *ast2.Logical) (any, *internal.Runtim
 	return r.evaluate(expr.Right)
 }
 
+func (r *Interpreter) VisitForFunctionCall(call *ast2.Call) (any, *internal.RuntimeError) {
+	callee, runtimeError := r.evaluate(call.Callee)
+	if runtimeError != nil {
+		return nil, runtimeError
+	}
+
+	args := make([]any, len(call.Params))
+	for i, arg := range call.Params {
+		val, err := r.evaluate(arg)
+		if err != nil {
+			return nil, err
+		}
+		args[i] = val
+	}
+
+	if _, ok := callee.(Callable); !ok {
+		return nil, &internal.RuntimeError{
+			Error: errors.New("non-callable element"),
+			Token: call.Paren,
+		}
+	}
+
+	// arity check
+	if len(args) != len(call.Params) {
+		return nil, &internal.RuntimeError{
+			Error: errors.New("invalid number of arguments"),
+			Token: call.Paren,
+		}
+	}
+
+	return callee.(Callable).Call(r, args)
+}
+
 // statements
 func (r *Interpreter) VisitForExpression(stmt *ast2.Expression) *internal.RuntimeError {
 	_, err := r.evaluate(*stmt.Expression)
@@ -241,6 +279,10 @@ func (r *Interpreter) VisitForWhile(while *ast2.While) *internal.RuntimeError {
 			return err
 		}
 	}
+	return nil
+}
+
+func (r *Interpreter) VisitForFunction(function *ast2.Function) *internal.RuntimeError {
 	return nil
 }
 

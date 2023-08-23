@@ -20,6 +20,7 @@ const (
 	missingLeftParenAfterForMsg       = "expected ( after 'for' "
 	missingRightParenAfterForMsg      = "expected ) after for clause "
 	missingSemicolonAfterForCondition = "expected ; after for loop condition "
+	missingRightParenAfterArgListMsg  = "expected ) after argument list"
 )
 
 var (
@@ -195,7 +196,52 @@ func (r *Parser) unary() (ast2.Expr, *TokenError) {
 			Right:    &right,
 		}, err
 	}
-	return r.primary()
+	return r.call()
+}
+
+func (r *Parser) call() (ast2.Expr, *TokenError) {
+	expr, tokenError := r.primary()
+	if tokenError != nil {
+		return nil, tokenError
+	}
+
+	for {
+		if r.match(scanning.LEFT_PAREN) {
+			expr, tokenError = r.finishCall(expr)
+			if tokenError != nil {
+				return nil, tokenError
+			}
+		}
+		break
+	}
+
+	return expr, nil
+
+}
+
+func (r *Parser) finishCall(callee ast2.Expr) (ast2.Expr, *TokenError) {
+	args := make([]ast2.Expr, 0)
+
+	if !r.check(scanning.RIGHT_PAREN) {
+		for r.match(scanning.COMMA) {
+			arg, tokenError := r.expression()
+			if tokenError != nil {
+				return nil, tokenError
+			}
+			args = append(args, arg)
+		}
+	}
+
+	paren, tokenError := r.consume(scanning.RIGHT_PAREN, missingRightParenAfterArgListMsg)
+	if tokenError != nil {
+		return nil, tokenError
+	}
+
+	return &ast2.Call{
+		Callee: callee,
+		Paren:  paren,
+		Params: args,
+	}, nil
 }
 
 func (r *Parser) primary() (ast2.Expr, *TokenError) {
