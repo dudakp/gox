@@ -1,7 +1,9 @@
+//go:generate stringer -type=functionType
 package parsing
 
 import (
 	"errors"
+	"fmt"
 	ast2 "gox/internal/ast"
 	"gox/internal/scanning"
 )
@@ -17,10 +19,22 @@ const (
 	missingLeftParenAfterWhileMsg  = "expected ( after 'while' "
 	missingRightParenAfterWhileMsg = "expected ) after 'while' condition "
 
-	missingLeftParenAfterForMsg       = "expected ( after 'for' "
-	missingRightParenAfterForMsg      = "expected ) after for clause "
-	missingSemicolonAfterForCondition = "expected ; after for loop condition "
-	missingRightParenAfterArgListMsg  = "expected ) after argument list"
+	missingLeftParenAfterForMsg           = "expected ( after 'for' "
+	missingRightParenAfterForMsg          = "expected ) after for clause "
+	missingSemicolonAfterForCondition     = "expected ; after for loop condition "
+	missingRightParenAfterArgListMsg      = "expected ) after argument list"
+	expectedFuncNameMsg                   = "expected %s name"
+	expectedLeftParenAfterFunctionNameMsg = "expected ( after function name"
+	expectedParamNameMsg                  = "expected param name"
+	expectedRightParentAfterParamListMsg  = "expected ) after param list"
+	expectedLeftBraceBeforeFuncBody       = "expected { brace before %s body"
+)
+
+type functionType int
+
+const (
+	FUNCTION functionType = iota
+	METHOD
 )
 
 var (
@@ -74,9 +88,62 @@ func (r *Parser) declaration() (ast2.Stmt, *TokenError) {
 			return nil, nil
 		}
 		return declaration, tokenError
+	} else if r.match(scanning.FUN) {
+		declaration, tokenError := r.function(FUNCTION)
+		if tokenError != nil {
+			r.synchronize()
+			// TODO: really dont return tokenErr?
+			return nil, nil
+		}
+		return declaration, tokenError
 	} else {
 		return r.statement()
 	}
+}
+
+func (r *Parser) function(fType functionType) (ast2.Stmt, *TokenError) {
+	funName, tokenError := r.consume(scanning.IDENTIFIER, fmt.Sprintf(expectedFuncNameMsg, fType.String()))
+	if tokenError != nil {
+		return nil, tokenError
+	}
+
+	_, tokenError = r.consume(scanning.LEFT_PAREN, expectedLeftParenAfterFunctionNameMsg)
+	if tokenError != nil {
+		return nil, tokenError
+	}
+	var params = make([]*scanning.Token, 0)
+	if !r.check(scanning.RIGHT_PAREN) {
+		param, tokenError := r.consume(scanning.IDENTIFIER, expectedParamNameMsg)
+		if tokenError != nil {
+			return nil, tokenError
+		}
+		params = append(params, param)
+		for r.match(scanning.COMMA) {
+			param, tokenError := r.consume(scanning.IDENTIFIER, expectedParamNameMsg)
+			if tokenError != nil {
+				return nil, tokenError
+			}
+			params = append(params, param)
+		}
+		_, tokenError = r.consume(scanning.RIGHT_PAREN, expectedRightParentAfterParamListMsg)
+
+	}
+	_, tokenError = r.consume(scanning.LEFT_BRACE, fmt.Sprintf(expectedLeftBraceBeforeFuncBody, fType.String()))
+	if tokenError != nil {
+		return nil, tokenError
+	}
+
+	body, tokenError := r.block()
+	if tokenError != nil {
+		return nil, tokenError
+	}
+
+	return &ast2.Function{
+		Name:   funName,
+		Params: params,
+		Body:   body.Statements,
+	}, nil
+
 }
 
 func (r *Parser) varDeclaration() (ast2.Stmt, *TokenError) {
@@ -223,6 +290,11 @@ func (r *Parser) finishCall(callee ast2.Expr) (ast2.Expr, *TokenError) {
 	args := make([]ast2.Expr, 0)
 
 	if !r.check(scanning.RIGHT_PAREN) {
+		arg, tokenError := r.expression()
+		if tokenError != nil {
+			return nil, tokenError
+		}
+		args = append(args, arg)
 		for r.match(scanning.COMMA) {
 			arg, tokenError := r.expression()
 			if tokenError != nil {

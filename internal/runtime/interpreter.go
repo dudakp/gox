@@ -11,7 +11,7 @@ import (
 
 // TODO: write tests
 type Interpreter struct {
-	env *environment
+	Env *environment
 }
 
 func NewInterpreter() *Interpreter {
@@ -21,7 +21,7 @@ func NewInterpreter() *Interpreter {
 	}
 
 	return &Interpreter{
-		env: glob,
+		Env: glob,
 	}
 }
 
@@ -149,7 +149,7 @@ func (r *Interpreter) VisitForGrouping(expr *ast2.Grouping) (any, *internal.Runt
 }
 
 func (r *Interpreter) VisitForVariableExpression(expr *ast2.VarExpr) (any, *internal.RuntimeError) {
-	res, err := r.env.get(expr.Name)
+	res, err := r.Env.get(expr.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (r *Interpreter) VisitForAssignExpression(expr *ast2.Assign) (any, *interna
 	if err != nil {
 		return nil, err
 	}
-	err = r.env.assign(expr.Name, val)
+	err = r.Env.assign(expr.Name, val)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,9 @@ func (r *Interpreter) VisitForFunctionCall(call *ast2.Call) (any, *internal.Runt
 		args[i] = val
 	}
 
-	if _, ok := callee.(Callable); !ok {
+	_, isStdFunc := callee.(Callable)
+	_, isLoxFunc := callee.(LoxFunction)
+	if !isStdFunc && !isLoxFunc {
 		return nil, &internal.RuntimeError{
 			Error: errors.New("non-callable element"),
 			Token: call.Paren,
@@ -217,7 +219,16 @@ func (r *Interpreter) VisitForFunctionCall(call *ast2.Call) (any, *internal.Runt
 		}
 	}
 
-	return callee.(Callable).Call(r, args)
+	// TODO: this is shit, find a better, idiomatic way
+	if isStdFunc {
+		return callee.(LoxStdFunction).Call(r, args)
+	}
+	if isLoxFunc {
+		// TODO: I dont want to assign to variable, I just want to call "Call" method
+		function := callee.(LoxFunction)
+		return function.Call(r, args)
+	}
+	return nil, nil
 }
 
 // statements
@@ -240,15 +251,15 @@ func (r *Interpreter) VisitForVar(stmt *ast2.Var) *internal.RuntimeError {
 		if err != nil {
 			return err
 		}
-		r.env.define(stmt.Name.Lexeme, value)
+		r.Env.define(stmt.Name.Lexeme, value)
 	} else {
-		r.env.define(stmt.Name.Lexeme, nil)
+		r.Env.define(stmt.Name.Lexeme, nil)
 	}
 	return nil
 }
 
 func (r *Interpreter) VisitForBlock(block *ast2.Block) *internal.RuntimeError {
-	return r.executeBlock(block.Statements, newEnvironment(r.env))
+	return r.executeBlock(block.Statements, newEnvironment(r.Env))
 }
 
 func (r *Interpreter) VisitForIf(ifStmt *ast2.If) *internal.RuntimeError {
@@ -283,6 +294,8 @@ func (r *Interpreter) VisitForWhile(while *ast2.While) *internal.RuntimeError {
 }
 
 func (r *Interpreter) VisitForFunction(function *ast2.Function) *internal.RuntimeError {
+	fun := LoxFunction{declaration: *function}
+	r.Env.define(function.Name.Lexeme, fun)
 	return nil
 }
 
@@ -342,14 +355,14 @@ func (r *Interpreter) execute(stmt ast2.Stmt) *internal.RuntimeError {
 }
 
 func (r *Interpreter) executeBlock(statements []ast2.Stmt, env *environment) *internal.RuntimeError {
-	prevEnv := r.env
+	prevEnv := r.Env
 
 	// after execution
 	defer func() {
-		r.env = prevEnv
+		r.Env = prevEnv
 	}()
 
-	r.env = env
+	r.Env = env
 
 	for _, statement := range statements {
 		err := r.execute(statement)
