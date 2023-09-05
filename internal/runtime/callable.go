@@ -25,7 +25,10 @@ func (r *LoxFunction) Arity() int {
 	return len(r.declaration.Params)
 }
 
-func (r *LoxFunction) Call(interpreter *Interpreter, args []any) (any, *internal.RuntimeError) {
+func (r *LoxFunction) Call(interpreter *Interpreter, args []any) (res any, err *internal.RuntimeError) {
+	defer func() {
+		res = recover()
+	}()
 	env := newEnvironment(interpreter.Env)
 	for i, param := range r.declaration.Params {
 		env.define(param.Lexeme, args[i])

@@ -28,6 +28,7 @@ const (
 	expectedParamNameMsg                  = "expected param name"
 	expectedRightParentAfterParamListMsg  = "expected ) after param list"
 	expectedLeftBraceBeforeFuncBody       = "expected { brace before %s body"
+	missingSemicolonAfterReturnMsg        = "missing ';' after return statement"
 )
 
 type functionType int
@@ -177,11 +178,14 @@ func (r *Parser) statement() (ast2.Stmt, *TokenError) {
 	if r.match(scanning.IF) {
 		return r.ifStatement()
 	}
-	if r.match(scanning.WHILE) {
-		return r.whileStatement()
-	}
 	if r.match(scanning.PRINT) {
 		return r.printStatement()
+	}
+	if r.match(scanning.RETURN) {
+		return r.returnStatement()
+	}
+	if r.match(scanning.WHILE) {
+		return r.whileStatement()
 	}
 	if r.match(scanning.LEFT_BRACE) {
 		return r.block()
@@ -430,6 +434,30 @@ func (r *Parser) synchronize() {
 		}
 	}
 	r.advance()
+}
+
+func (r *Parser) returnStatement() (ast2.Stmt, *TokenError) {
+	keyword := r.previous()
+
+	var err *TokenError
+	var value ast2.Expr
+	if !r.check(scanning.SEMICOLON) {
+		value, err = r.expression()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	_, err = r.consume(scanning.SEMICOLON, missingSemicolonAfterReturnMsg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast2.Return{
+		Name:  keyword,
+		Value: value,
+	}, nil
+
 }
 
 func (r *Parser) printStatement() (ast2.Stmt, *TokenError) {

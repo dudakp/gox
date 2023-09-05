@@ -13,6 +13,7 @@ type StmtVisitor interface {
 	VisitForIf(ifStmt *If) *internal.RuntimeError
 	VisitForWhile(while *While) *internal.RuntimeError
 	VisitForFunction(while *Function) *internal.RuntimeError
+	VisitForReturn(ret *Return) *internal.RuntimeError
 }
 type Stmt interface {
 	Accept(visitor StmtVisitor) *internal.RuntimeError
@@ -85,4 +86,14 @@ type Function struct {
 
 func (r *Function) Accept(visitor StmtVisitor) *internal.RuntimeError {
 	return visitor.VisitForFunction(r)
+}
+
+// Return
+type Return struct {
+	Name  *scanning.Token
+	Value Expr
+}
+
+func (r *Return) Accept(visitor StmtVisitor) *internal.RuntimeError {
+	return visitor.VisitForReturn(r)
 }

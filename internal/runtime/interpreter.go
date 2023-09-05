@@ -194,15 +194,15 @@ func (r *Interpreter) VisitForFunctionCall(call *ast2.Call) (any, *internal.Runt
 	}
 
 	args := make([]any, len(call.Params))
-	for i, arg := range call.Params {
-		val, err := r.evaluate(arg)
+	for i, param := range call.Params {
+		val, err := r.evaluate(param)
 		if err != nil {
 			return nil, err
 		}
 		args[i] = val
 	}
 
-	_, isStdFunc := callee.(Callable)
+	_, isStdFunc := callee.(LoxStdFunction)
 	_, isLoxFunc := callee.(LoxFunction)
 	if !isStdFunc && !isLoxFunc {
 		return nil, &internal.RuntimeError{
@@ -299,6 +299,15 @@ func (r *Interpreter) VisitForFunction(function *ast2.Function) *internal.Runtim
 	return nil
 }
 
+func (r *Interpreter) VisitForReturn(ret *ast2.Return) *internal.RuntimeError {
+	res, err := r.evaluate(ret.Value)
+	if err != nil {
+		return err
+	}
+	// TODO: make type for Return panic
+	panic(res)
+}
+
 func (r *Interpreter) evaluate(expr ast2.Expr) (any, *internal.RuntimeError) {
 	return expr.Accept(r)
 }
@@ -318,7 +327,7 @@ func (r *Interpreter) isTruthy(right any) bool {
 }
 
 func (r *Interpreter) isEqual(a, b any) bool {
-	return (a == nil && b == nil) && (a == b)
+	return (a == nil && b == nil) || (a == b)
 }
 
 func (r *Interpreter) checkNumberOperand(operator *scanning.Token, operand any) *internal.RuntimeError {
